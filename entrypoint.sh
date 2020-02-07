@@ -6,6 +6,7 @@
 # Set VERBOSE=1 to get more output
 POD_NAME=${POD_NAME:-""}
 VERBOSE=${VERBOSE:-0}
+PUSH_GATEWAY_URL="http://propel:8080/"
 verbose () {
   [ "${VERBOSE}" -eq 1 ] && return 0 || return 1
 }
@@ -63,11 +64,25 @@ echo "Polling ${NOTICE_URL} every ${POLL_INTERVAL} second(s)"
 # To whom it may concern: http://superuser.com/questions/590099/can-i-make-curl-fail-with-an-exitcode-different-than-0-if-the-http-status-code-i
 while http_status=$(curl -o /dev/null -w '%{http_code}' -sL "${NOTICE_URL}"); [ "${http_status}" -ne 200 ]; do
   verbose && echo "$(date): ${http_status}"
+
+  if [ "${PUSH_GATEWAY_URL}" != "" ]; then
+    curl \
+      -d "spot_termination_handler_spot_interruption{node=\"${NODE_NAME}\"} 0" \
+      -X POST ${PUSH_GATEWAY_URL}
+  fi
+
   sleep "${POLL_INTERVAL}"
 done
 
 echo "$(date): ${http_status}"
 MESSAGE="Spot Termination${CLUSTER_INFO}: ${NODE_NAME}, Instance: ${INSTANCE_ID}, Instance Type: ${INSTANCE_TYPE}, AZ: ${AZ}"
+
+if [ "${PUSH_GATEWAY_URL}" != "" ]; then
+  echo "Sending interruption metric to Push Gateway"
+  curl \
+    -d "spot_termination_handler_spot_interruption{node=\"${NODE_NAME}\"} 1" \
+    -X POST ${PUSH_GATEWAY_URL}
+fi
 
 # Notify Hipchat
 # Set the HIPCHAT_ROOM_ID & HIPCHAT_AUTH_TOKEN variables below.
